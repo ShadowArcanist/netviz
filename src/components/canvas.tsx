@@ -80,14 +80,16 @@ function nodeDims(n: AppNode): { w: number; h: number } {
 function computeSnap(
   drag: AppNode,
   dragPos: { x: number; y: number },
-  others: AppNode[]
+  others: AppNode[],
+  zoom: number = 1
 ): { position: { x: number; y: number }; guides: Guide[] } {
+  const threshold = SNAP_THRESHOLD / zoom;
   const { w: dw, h: dh } = nodeDims(drag);
   const dEdgesX = [dragPos.x, dragPos.x + dw / 2, dragPos.x + dw];
   const dEdgesY = [dragPos.y, dragPos.y + dh / 2, dragPos.y + dh];
 
-  let bestX = { diff: SNAP_THRESHOLD, delta: 0, line: null as number | null };
-  let bestY = { diff: SNAP_THRESHOLD, delta: 0, line: null as number | null };
+  let bestX = { diff: threshold, delta: 0, line: null as number | null };
+  let bestY = { diff: threshold, delta: 0, line: null as number | null };
 
   for (const o of others) {
     const { w: ow, h: oh } = nodeDims(o);
@@ -162,14 +164,8 @@ function computeDimsToTarget(sel: AppNode, target: AppNode) {
   const { w: sw, h: sh } = nodeDims(sel);
   const { w: tw, h: th } = nodeDims(target);
   if (sw === 0 || sh === 0 || tw === 0 || th === 0) return null;
-  const sL = sel.position.x;
-  const sR = sL + sw;
-  const sT = sel.position.y;
-  const sB = sT + sh;
-  const tL = target.position.x;
-  const tR = tL + tw;
-  const tT = target.position.y;
-  const tB = tT + th;
+  const sL = sel.position.x, sR = sL + sw, sT = sel.position.y, sB = sT + sh;
+  const tL = target.position.x, tR = tL + tw, tT = target.position.y, tB = tT + th;
 
   const vOverlap = Math.max(sT, tT) < Math.min(sB, tB);
   const hOverlap = Math.max(sL, tL) < Math.min(sR, tR);
@@ -180,22 +176,28 @@ function computeDimsToTarget(sel: AppNode, target: AppNode) {
     gapH?: DimSeg; gapV?: DimSeg;
   } = { sL, sR, sT, sB, sw, sh };
 
-  const cx = (sL + sR) / 2;
-  const cy = (sT + sB) / 2;
-
-  if (vOverlap) {
-    out.left = { from: tL, to: sL, along: cy, value: Math.abs(sL - tL) };
-    out.right = { from: sR, to: tR, along: cy, value: Math.abs(tR - sR) };
-  } else if (tB <= sT || tT >= sB) {
-    if (tR < sL) out.gapH = { from: tR, to: sL, along: cy, value: sL - tR };
-    else if (tL > sR) out.gapH = { from: sR, to: tL, along: cy, value: tL - sR };
-  }
-  if (hOverlap) {
-    out.top = { from: tT, to: sT, along: cx, value: Math.abs(sT - tT) };
-    out.bottom = { from: sB, to: tB, along: cx, value: Math.abs(tB - sB) };
-  } else if (tR <= sL || tL >= sR) {
-    if (tB < sT) out.gapV = { from: tB, to: sT, along: cx, value: sT - tB };
-    else if (tT > sB) out.gapV = { from: sB, to: tT, along: cx, value: tT - sB };
+  if (vOverlap && hOverlap) {
+    const vMid = (Math.max(sT, tT) + Math.min(sB, tB)) / 2;
+    const hMid = (Math.max(sL, tL) + Math.min(sR, tR)) / 2;
+    out.left = { from: Math.min(sL, tL), to: Math.max(sL, tL), along: vMid, value: Math.abs(sL - tL) };
+    out.right = { from: Math.min(sR, tR), to: Math.max(sR, tR), along: vMid, value: Math.abs(sR - tR) };
+    out.top = { from: Math.min(sT, tT), to: Math.max(sT, tT), along: hMid, value: Math.abs(sT - tT) };
+    out.bottom = { from: Math.min(sB, tB), to: Math.max(sB, tB), along: hMid, value: Math.abs(sB - tB) };
+  } else if (vOverlap) {
+    const along = (Math.max(sT, tT) + Math.min(sB, tB)) / 2;
+    if (tR <= sL) out.gapH = { from: tR, to: sL, along, value: sL - tR };
+    else if (tL >= sR) out.gapH = { from: sR, to: tL, along, value: tL - sR };
+  } else if (hOverlap) {
+    const along = (Math.max(sL, tL) + Math.min(sR, tR)) / 2;
+    if (tB <= sT) out.gapV = { from: tB, to: sT, along, value: sT - tB };
+    else if (tT >= sB) out.gapV = { from: sB, to: tT, along, value: tT - sB };
+  } else {
+    const cy = (sT + sB) / 2;
+    const cx = (sL + sR) / 2;
+    if (tR <= sL) out.gapH = { from: tR, to: sL, along: cy, value: sL - tR };
+    else if (tL >= sR) out.gapH = { from: sR, to: tL, along: cy, value: tL - sR };
+    if (tB <= sT) out.gapV = { from: tB, to: sT, along: cx, value: sT - tB };
+    else if (tT >= sB) out.gapV = { from: sB, to: tT, along: cx, value: tT - sB };
   }
   return out;
 }
@@ -298,7 +300,7 @@ function CanvasInner() {
           const others = current.filter(
             (n) => n.id !== drag.id && !n.hidden
           );
-          const snap = computeSnap(drag, c.position, others);
+          const snap = computeSnap(drag, c.position, others, zoom);
           nextGuides.push(...snap.guides);
           patched = changes.map((ch) =>
             ch === c ? { ...c, position: snap.position } : ch
@@ -317,7 +319,7 @@ function CanvasInner() {
       }
       onNodesChange(patched);
     },
-    [onNodesChange, guides.length, showSmartGuides]
+    [onNodesChange, guides.length, showSmartGuides, zoom]
   );
 
   const registry = useMemo(
