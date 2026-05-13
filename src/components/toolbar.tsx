@@ -1,11 +1,13 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Check,
   ChevronRight,
@@ -64,6 +66,10 @@ export function Toolbar() {
   const [exportDialog, setExportDialog] = useState<{
     format: "png" | "svg";
     name: string;
+    bounds?: { x: number; y: number; width: number; height: number };
+  } | null>(null);
+  const [cropMode, setCropMode] = useState<{
+    format: "png" | "svg";
   } | null>(null);
 
   const canUndo = useStore(useFlowStore.temporal, (s) => s.pastStates.length > 0);
@@ -130,15 +136,50 @@ export function Toolbar() {
 
   const openExportDialog = (format: "png" | "svg") => {
     if (nodes.length === 0) return;
-    setExportDialog({ format, name: defaultExportName() });
+    setCropMode({ format });
   };
 
-  const exportImage = async (format: "png" | "svg", filename: string) => {
+  const onCropComplete = useCallback(
+    (screenRect: { x: number; y: number; width: number; height: number }) => {
+      if (!cropMode) return;
+      const tl = screenToFlowPosition({ x: screenRect.x, y: screenRect.y });
+      const br = screenToFlowPosition({
+        x: screenRect.x + screenRect.width,
+        y: screenRect.y + screenRect.height,
+      });
+      setCropMode(null);
+      setExportDialog({
+        format: cropMode.format,
+        name: defaultExportName(),
+        bounds: {
+          x: tl.x,
+          y: tl.y,
+          width: br.x - tl.x,
+          height: br.y - tl.y,
+        },
+      });
+    },
+    [cropMode, screenToFlowPosition]
+  );
+
+  const onCropExportAll = useCallback(() => {
+    if (!cropMode) return;
+    setCropMode(null);
+    setExportDialog({ format: cropMode.format, name: defaultExportName() });
+  }, [cropMode]);
+
+  const onCropCancel = useCallback(() => setCropMode(null), []);
+
+  const exportImage = async (
+    format: "png" | "svg",
+    filename: string,
+    customBounds?: { x: number; y: number; width: number; height: number }
+  ) => {
     const viewport = document.querySelector(
       ".react-flow__viewport"
     ) as HTMLElement | null;
     if (!viewport || nodes.length === 0) return;
-    const bounds = getNodesBounds(nodes);
+    const bounds = customBounds ?? getNodesBounds(nodes);
     if (bounds.width === 0 || bounds.height === 0) return;
     const padding = 80;
     const width = Math.round(bounds.width + padding * 2);
@@ -627,9 +668,9 @@ export function Toolbar() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && exportDialog) {
                     e.preventDefault();
-                    const { format, name } = exportDialog;
+                    const { format, name, bounds } = exportDialog;
                     setExportDialog(null);
-                    void exportImage(format, name);
+                    void exportImage(format, name, bounds);
                   }
                 }}
               />
@@ -645,9 +686,9 @@ export function Toolbar() {
             <Button
               onClick={() => {
                 if (!exportDialog) return;
-                const { format, name } = exportDialog;
+                const { format, name, bounds } = exportDialog;
                 setExportDialog(null);
-                void exportImage(format, name);
+                void exportImage(format, name, bounds);
               }}
             >
               Export
@@ -679,7 +720,122 @@ export function Toolbar() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {cropMode && (
+        <CropOverlay
+          onComplete={onCropComplete}
+          onExportAll={onCropExportAll}
+          onCancel={onCropCancel}
+        />
+      )}
     </header>
+  );
+}
+
+function CropOverlay({
+  onComplete,
+  onExportAll,
+  onCancel,
+}: {
+  onComplete: (rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => void;
+  onExportAll: () => void;
+  onCancel: () => void;
+}) {
+  const [start, setStart] = useState<{ x: number; y: number } | null>(null);
+  const [end, setEnd] = useState<{ x: number; y: number } | null>(null);
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onCancel]);
+
+  const rect =
+    start && end
+      ? {
+          x: Math.min(start.x, end.x),
+          y: Math.min(start.y, end.y),
+          width: Math.abs(end.x - start.x),
+          height: Math.abs(end.y - start.y),
+        }
+      : null;
+
+  const handleDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    dragging.current = true;
+    setStart({ x: e.clientX, y: e.clientY });
+    setEnd({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMove = (e: React.MouseEvent) => {
+    if (!dragging.current) return;
+    setEnd({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleUp = () => {
+    if (!dragging.current || !rect) return;
+    dragging.current = false;
+    if (rect.width < 10 || rect.height < 10) {
+      setStart(null);
+      setEnd(null);
+      return;
+    }
+    onComplete(rect);
+  };
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 cursor-crosshair select-none"
+      onMouseDown={handleDown}
+      onMouseMove={handleMove}
+      onMouseUp={handleUp}
+    >
+      {/* dark overlay */}
+      {rect && rect.width > 2 ? (
+        <div
+          className="absolute border-2 border-dashed border-ring"
+          style={{
+            left: rect.x,
+            top: rect.y,
+            width: rect.width,
+            height: rect.height,
+            boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)",
+          }}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-black/30" />
+      )}
+      {/* hint bar */}
+      <div className="fixed left-1/2 top-4 z-[51] -translate-x-1/2">
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2 shadow-lg">
+          <span className="text-sm text-foreground">
+            Draw to select area
+          </span>
+          <button
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onExportAll();
+            }}
+            className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/80"
+          >
+            Export all
+          </button>
+          <span className="text-xs text-muted-foreground">
+            ESC to cancel
+          </span>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
