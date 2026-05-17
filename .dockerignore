@@ -1,4 +1,11 @@
-**
-!dist/**
-!nginx.conf
-!Dockerfile
+node_modules
+dist
+.git
+.github
+.ai
+*.md
+.env*
+.vscode
+.idea
+LICENSE
+Taskfile.yaml
