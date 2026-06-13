@@ -439,7 +439,7 @@ export const useFlowStore = create<FlowState>()(
           type: "text",
           position,
           zIndex: 1,
-          data: { text: "Text", accent: "amber" },
+          data: { text: "Text", accent: "amber", bgColor: "transparent" },
         },
       ],
     })),
