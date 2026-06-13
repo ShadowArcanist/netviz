@@ -29,7 +29,6 @@ import {
   Minus,
   Pencil,
   Square,
-  TrainFrontTunnel,
   Trash2,
   Type,
   type LucideIcon,
@@ -82,8 +81,6 @@ function nodeIcon(node: AppNode, customBlocks: BlockDef[]): LucideIcon {
       return Type;
     case "step":
       return Hash;
-    case "tunnel":
-      return TrainFrontTunnel;
     case "line":
       return Minus;
     case "image":
@@ -91,6 +88,7 @@ function nodeIcon(node: AppNode, customBlocks: BlockDef[]): LucideIcon {
     case "code":
       return Code2;
   }
+  return Square;
 }
 
 function readPayload(e: DragEvent): DragPayload | null {

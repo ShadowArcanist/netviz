@@ -36,7 +36,6 @@ import { InfraNodeView } from "./nodes/infra-node";
 import { ShapeNodeView } from "./nodes/shape-node";
 import { TextNodeView } from "./nodes/text-node";
 import { StepNodeView } from "./nodes/step-node";
-import { TunnelNodeView } from "./nodes/tunnel-node";
 import { LineNodeView } from "./nodes/line-node";
 import { ImageNodeView } from "./nodes/image-node";
 import { CodeNodeView } from "./nodes/code-node";
@@ -55,7 +54,6 @@ const nodeTypes: NodeTypes = {
   shape: ShapeNodeView,
   text: TextNodeView,
   step: StepNodeView,
-  tunnel: TunnelNodeView,
   line: LineNodeView,
   image: ImageNodeView,
   code: CodeNodeView,
@@ -113,7 +111,6 @@ type DragPayload =
   | { kind: "shape"; shape: ShapeKind }
   | { kind: "text" }
   | { kind: "step" }
-  | { kind: "tunnel" }
   | { kind: "line" }
   | { kind: "code" };
 
@@ -140,7 +137,6 @@ function CanvasInner() {
   const addShapeNode = useFlowStore((s) => s.addShapeNode);
   const addTextNode = useFlowStore((s) => s.addTextNode);
   const addStepNode = useFlowStore((s) => s.addStepNode);
-  const addTunnelNode = useFlowStore((s) => s.addTunnelNode);
   const addLineNode = useFlowStore((s) => s.addLineNode);
   const addCodeNode = useFlowStore((s) => s.addCodeNode);
   const customBlocks = useFlowStore((s) => s.customBlocks);
@@ -301,8 +297,6 @@ function CanvasInner() {
         addTextNode(position);
       } else if (payload.kind === "step") {
         addStepNode(position);
-      } else if (payload.kind === "tunnel") {
-        addTunnelNode(position);
       } else if (payload.kind === "line") {
         addLineNode(position);
       } else if (payload.kind === "code") {
@@ -316,7 +310,6 @@ function CanvasInner() {
       addShapeNode,
       addTextNode,
       addStepNode,
-      addTunnelNode,
       addLineNode,
       addCodeNode,
     ]

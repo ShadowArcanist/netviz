@@ -9,7 +9,6 @@ import {
   Sparkles,
   Square,
   Trash2,
-  TrainFrontTunnel,
   Type,
 } from "lucide-react";
 import { useFlowStore, type EdgeLineStyle, type ShapeKind } from "@/store/flow-store";
@@ -132,15 +131,6 @@ function ShapeChip({
   );
 }
 
-function TunnelChip() {
-  return (
-    <DragChip payload={{ kind: "tunnel" }}>
-      <AccentTile icon={TrainFrontTunnel} accent="sky" />
-      <span className="flex-1 truncate">Tunnel</span>
-    </DragChip>
-  );
-}
-
 function TextChip() {
   return (
     <DragChip payload={{ kind: "text" }}>
@@ -227,7 +217,6 @@ export function Sidebar() {
             <div className="flex flex-col gap-1.5">
               <ShapeChip shape="rectangle" label="Rectangle" accent="violet" />
               <ShapeChip shape="circle" label="Circle" accent="emerald" />
-              <TunnelChip />
             </div>
 
             <SectionLabel>Annotations</SectionLabel>

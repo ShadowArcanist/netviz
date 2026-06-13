@@ -171,12 +171,6 @@
   animation: turbo-border 3s linear infinite;
 }
 
-.react-flow__node.turbo-on .tunnel-portal-left {
-  border-right-color: var(--turbo-start, #ec4899) !important;
-}
-.react-flow__node.turbo-on .tunnel-portal-right {
-  border-left-color: var(--turbo-end, #3b82f6) !important;
-}
 /* Larger hit area on NodeResizer edge lines so any side drag-resizes */
 .react-flow__resize-control.line.top,
 .react-flow__resize-control.line.bottom {
@@ -185,33 +179,6 @@
 .react-flow__resize-control.line.left,
 .react-flow__resize-control.line.right {
   width: 8px;
-}
-
-/* Tunnel: draw turbo ring inside body (overflow-hidden would clip outside) */
-.react-flow__node.turbo-on .tunnel-body {
-  position: relative;
-  border-color: transparent !important;
-}
-.react-flow__node.turbo-on .tunnel-body::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 3px;
-  background: conic-gradient(
-    from var(--turbo-angle),
-    var(--turbo-start, #ec4899),
-    var(--turbo-end, #3b82f6),
-    var(--turbo-start, #ec4899)
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
-  pointer-events: none;
-  animation: turbo-border 3s linear infinite;
-  z-index: 2;
 }
 @keyframes turbo-border {
   from { --turbo-angle: 0deg; }
@@ -250,4 +217,3 @@
 .preview-mode .react-flow__edge:hover {
   cursor: default !important;
 }
-

@@ -32,7 +32,6 @@ import {
   type StepNode,
   type TextAlign,
   type TextNode,
-  type TunnelNode,
 } from "@/store/flow-store";
 import {
   ACCENT_CLASSES,
@@ -123,7 +122,6 @@ function NodeEditor({ node }: { node: AppNode }) {
   if (node.type === "infra") return <InfraEditor node={node as InfraNode} />;
   if (node.type === "shape") return <ShapeEditor node={node as ShapeNode} />;
   if (node.type === "step") return <StepEditor node={node as StepNode} />;
-  if (node.type === "tunnel") return <TunnelEditor node={node as TunnelNode} />;
   if (node.type === "line") return <LineEditor node={node as LineNode} />;
   if (node.type === "image") return <ImageEditor node={node as ImageNode} />;
   if (node.type === "code") return <CodeEditor node={node as CodeNode} />;
@@ -861,32 +859,6 @@ function StepEditor({ node }: { node: StepNode }) {
         targets={[
           { key: "bg", label: "Background", value: node.data.bgColor, onChange: (v) => updateNodeData(node.id, { bgColor: v }) },
           { key: "number", label: "Number", value: node.data.titleColor, onChange: (v) => updateNodeData(node.id, { titleColor: v }) },
-          { key: "border", label: "Border", value: node.data.borderColor, onChange: (v) => updateNodeData(node.id, { borderColor: v }) },
-        ]}
-      />
-    </>
-  );
-}
-
-function TunnelEditor({ node }: { node: TunnelNode }) {
-  const updateNodeData = useFlowStore((s) => s.updateNodeData);
-  return (
-    <>
-      <div className="grid gap-1.5">
-        <Label htmlFor={`${node.id}-label`}>Label</Label>
-        <Input
-          id={`${node.id}-label`}
-          value={node.data.label ?? ""}
-          onChange={(e) => updateNodeData(node.id, { label: e.target.value })}
-          placeholder="Tunnel"
-        />
-      </div>
-      <AccentPicker value={node.data.accent ?? "sky"} onChange={(a) => updateNodeData(node.id, { accent: a })} />
-      <LayerControls id={node.id} />
-      <ColorsSection
-        targets={[
-          { key: "bg", label: "Background", value: node.data.bgColor, onChange: (v) => updateNodeData(node.id, { bgColor: v }) },
-          { key: "label", label: "Label", value: node.data.titleColor, onChange: (v) => updateNodeData(node.id, { titleColor: v }) },
           { key: "border", label: "Border", value: node.data.borderColor, onChange: (v) => updateNodeData(node.id, { borderColor: v }) },
         ]}
       />

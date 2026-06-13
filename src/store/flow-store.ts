@@ -73,13 +73,6 @@ export type StepNodeData = WithGroup &
   };
 export type StepNode = Node<StepNodeData, "step">;
 
-export type TunnelNodeData = WithGroup &
-  WithColors & {
-    label?: string;
-    accent?: Accent;
-  };
-export type TunnelNode = Node<TunnelNodeData, "tunnel">;
-
 export type LineDirection = "tl-br" | "tr-bl" | "l-r" | "t-b";
 export type ArrowShape = "none" | "triangle" | "open" | "diamond" | "circle" | "bar";
 export type LinePoint = { x: number; y: number };
@@ -135,7 +128,6 @@ export type AppNode =
   | ShapeNode
   | TextNode
   | StepNode
-  | TunnelNode
   | LineNode
   | ImageNode
   | CodeNode;
@@ -197,7 +189,6 @@ type NodeDataPatch = Partial<InfraNodeData> &
   Partial<TextNodeData> &
   Partial<CodeNodeData> &
   Partial<StepNodeData> &
-  Partial<TunnelNodeData> &
   Partial<LineNodeData> &
   Partial<ImageNodeData>;
 
@@ -210,7 +201,6 @@ type FlowState = Snapshot & {
   addTextNode: (position: { x: number; y: number }) => void;
   addCodeNode: (position: { x: number; y: number }) => void;
   addStepNode: (position: { x: number; y: number }) => void;
-  addTunnelNode: (position: { x: number; y: number }) => void;
   addLineNode: (position: { x: number; y: number }) => void;
   updateLineGeometry: (
     id: string,
@@ -301,20 +291,21 @@ const infraSize = (variant: InfraVariant) =>
   variant === "card" ? { width: 180, height: 150 } : { width: 220, height: 72 };
 
 function renamedData(node: AppNode, name: string): AppNode["data"] {
+  const data = node.data;
   switch (node.type) {
     case "text":
-      return { ...node.data, text: name } as TextNodeData;
+      return { ...data, text: name } as TextNodeData;
     case "line":
     case "image":
-      return node.data;
+      return data;
     case "code":
-      return { ...node.data, label: name } as CodeNodeData;
+      return { ...data, label: name } as CodeNodeData;
     case "infra":
     case "shape":
-    case "tunnel":
     case "step":
-      return { ...node.data, label: name } as AppNode["data"];
+      return { ...data, label: name } as AppNode["data"];
   }
+  return data;
 }
 
 function descendantGroupIds(groups: Group[], rootId: string): Set<string> {
@@ -488,21 +479,6 @@ export const useFlowStore = create<FlowState>()(
         ],
       };
     }),
-
-  addTunnelNode: (position) =>
-    set((s) => ({
-      nodes: [
-        ...s.nodes,
-        {
-          id: nextNodeId(),
-          type: "tunnel",
-          position,
-          style: { width: 260, height: 90 },
-          zIndex: 0,
-          data: { label: "Tunnel", accent: "sky" },
-        },
-      ],
-    })),
 
   addLineNode: (position) =>
     set((s) => ({
@@ -1176,8 +1152,6 @@ export function getNodeDisplayName(node: AppNode): string {
       return (node.data.text || "Text").split("\n")[0].slice(0, 40);
     case "step":
       return node.data.label || `Step ${node.data.step}`;
-    case "tunnel":
-      return node.data.label || "Tunnel";
     case "line":
       return "Line";
     case "image":
@@ -1185,4 +1159,5 @@ export function getNodeDisplayName(node: AppNode): string {
     case "code":
       return node.data.label || `Code (${node.data.language})`;
   }
+  return "Block";
 }
