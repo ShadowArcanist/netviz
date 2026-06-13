@@ -5,8 +5,6 @@ import {
   AlignLeft,
   AlignRight,
   ArrowDown,
-  ArrowDownLeft,
-  ArrowDownRight,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
@@ -14,7 +12,6 @@ import {
   ChevronsDown,
   ChevronsUp,
   ChevronUp,
-  MoveDown,
   Search,
   Upload,
   X,
@@ -47,6 +44,11 @@ import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { cn } from "@/lib/utils";
+import {
+  deriveLegacyLineEndpoints,
+  lineAngleDegrees,
+  rotateLineToAngle,
+} from "@/lib/line-geometry";
 
 const ACCENTS: Accent[] = [
   "indigo",
@@ -71,7 +73,7 @@ export function Inspector() {
     useShallow((s) => {
       const n = s.nodes.find((x) => x.selected);
       if (!n) return null;
-      return { id: n.id, type: n.type, data: n.data };
+      return n;
     })
   );
   if (!selectedProjection) return null;
@@ -960,13 +962,6 @@ function TextEditor({ node }: { node: TextNode }) {
   );
 }
 
-const LINE_DIRECTIONS: { id: "l-r" | "t-b" | "tl-br" | "tr-bl"; icon: typeof ArrowRight; label: string }[] = [
-  { id: "l-r", icon: ArrowRight, label: "Left → Right" },
-  { id: "t-b", icon: MoveDown, label: "Top → Bottom" },
-  { id: "tl-br", icon: ArrowDownRight, label: "Diagonal ↘" },
-  { id: "tr-bl", icon: ArrowDownLeft, label: "Diagonal ↙" },
-];
-
 const ARROW_SHAPES: { id: ArrowShape; label: string; svg: React.ReactNode }[] = [
   { id: "none", label: "None", svg: <line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" strokeWidth="1.5" /> },
   { id: "triangle", label: "Triangle", svg: <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" /> },
@@ -1038,9 +1033,28 @@ const LINE_STROKE_PRESETS: { id: string; hex: string | null; label: string }[] =
 
 function LineEditor({ node }: { node: LineNode }) {
   const updateNodeData = useFlowStore((s) => s.updateNodeData);
-  const direction = node.data.direction ?? "l-r";
+  const updateLineGeometry = useFlowStore((s) => s.updateLineGeometry);
+  const width =
+    node.measured?.width ??
+    (typeof node.width === "number" ? node.width : undefined) ??
+    (typeof node.style?.width === "number" ? node.style.width : undefined) ??
+    200;
+  const height =
+    node.measured?.height ??
+    (typeof node.height === "number" ? node.height : undefined) ??
+    (typeof node.style?.height === "number" ? node.style.height : undefined) ??
+    60;
+  const endpoints =
+    node.data.start && node.data.end
+      ? { start: node.data.start, end: node.data.end }
+      : deriveLegacyLineEndpoints(
+          node.data.direction,
+          width,
+          height,
+          node.data.rotation ?? 0
+        );
+  const rotation = lineAngleDegrees(endpoints.start, endpoints.end);
   const curvature = node.data.curvature ?? 0;
-  const rotation = node.data.rotation ?? 0;
   const strokeColor = node.data.strokeColor ?? "#94a3b8";
   const strokeWidth = node.data.strokeWidth ?? 2;
   const dashed = !!node.data.dashed;
@@ -1052,44 +1066,26 @@ function LineEditor({ node }: { node: LineNode }) {
   return (
     <>
       <LayerControls id={node.id} />
-      <div className="grid gap-2">
-        <Label>Direction</Label>
-        <div className="grid grid-cols-4 gap-1">
-          {LINE_DIRECTIONS.map((d) => {
-            const Ic = d.icon;
-            const active = direction === d.id;
-            return (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => updateNodeData(node.id, { direction: d.id })}
-                title={d.label}
-                className={cn(
-                  "flex h-9 items-center justify-center rounded-md border border-border transition-colors",
-                  active
-                    ? "bg-accent text-accent-foreground ring-1 ring-ring"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Ic className="h-4 w-4" />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <div className="grid gap-1.5">
         <Label htmlFor={`${node.id}-rot`}>Rotation ({rotation}°)</Label>
         <input
           id={`${node.id}-rot`}
           type="range"
           min={0}
-          max={360}
+          max={359}
           step={1}
           value={rotation}
-          onChange={(e) =>
-            updateNodeData(node.id, { rotation: Number(e.target.value) })
-          }
+          onChange={(e) => {
+            const geometry = rotateLineToAngle({
+              position: node.position,
+              width,
+              height,
+              start: endpoints.start,
+              end: endpoints.end,
+              angle: Number(e.target.value),
+            });
+            updateLineGeometry(node.id, geometry);
+          }}
           className="w-full"
         />
       </div>

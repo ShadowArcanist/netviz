@@ -82,10 +82,13 @@ export type TunnelNode = Node<TunnelNodeData, "tunnel">;
 
 export type LineDirection = "tl-br" | "tr-bl" | "l-r" | "t-b";
 export type ArrowShape = "none" | "triangle" | "open" | "diamond" | "circle" | "bar";
+export type LinePoint = { x: number; y: number };
 export type LineNodeData = WithGroup & {
   direction?: LineDirection;
   curvature?: number;
   rotation?: number;
+  start?: LinePoint;
+  end?: LinePoint;
   arrowStart?: boolean;
   arrowEnd?: boolean;
   arrowStartShape?: ArrowShape;
@@ -209,6 +212,16 @@ type FlowState = Snapshot & {
   addStepNode: (position: { x: number; y: number }) => void;
   addTunnelNode: (position: { x: number; y: number }) => void;
   addLineNode: (position: { x: number; y: number }) => void;
+  updateLineGeometry: (
+    id: string,
+    geometry: {
+      position: LinePoint;
+      width: number;
+      height: number;
+      start: LinePoint;
+      end: LinePoint;
+    }
+  ) => void;
   addImageNode: (
     src: string,
     position: { x: number; y: number },
@@ -502,9 +515,9 @@ export const useFlowStore = create<FlowState>()(
           style: { width: 200, height: 60 },
           zIndex: 1,
           data: {
-            direction: "l-r",
             curvature: 0,
-            rotation: 0,
+            start: { x: 12, y: 30 },
+            end: { x: 188, y: 30 },
             arrowStart: false,
             arrowEnd: true,
             arrowStartShape: "triangle",
@@ -515,6 +528,30 @@ export const useFlowStore = create<FlowState>()(
           },
         },
       ],
+    })),
+
+  updateLineGeometry: (id, geometry) =>
+    set((s) => ({
+      nodes: s.nodes.map((n) =>
+        n.id === id && n.type === "line"
+          ? {
+              ...n,
+              position: geometry.position,
+              style: {
+                ...(n.style ?? {}),
+                width: geometry.width,
+                height: geometry.height,
+              },
+              data: {
+                ...n.data,
+                start: geometry.start,
+                end: geometry.end,
+                direction: undefined,
+                rotation: undefined,
+              },
+            }
+          : n
+      ),
     })),
 
   addImageNode: (src, position, size) =>
