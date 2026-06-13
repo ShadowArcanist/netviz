@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
 } from "react";
@@ -41,6 +42,13 @@ import { ImageNodeView } from "./nodes/image-node";
 import { CodeNodeView } from "./nodes/code-node";
 import { LabeledEdge } from "./edges/labeled-edge";
 import { cn } from "@/lib/utils";
+import {
+  computeSnap,
+  nodeDims,
+  resolveSnapPosition,
+  type ActiveSnap,
+  type Guide,
+} from "@/lib/snapping";
 
 const nodeTypes: NodeTypes = {
   infra: InfraNodeView,
@@ -55,108 +63,6 @@ const nodeTypes: NodeTypes = {
 const edgeTypes: EdgeTypes = { labeled: LabeledEdge };
 
 const DRAG_MIME = "application/x-netviz";
-
-const SNAP_THRESHOLD = 6;
-
-type Guide = {
-  axis: "x" | "y";
-  pos: number;
-  from: number;
-  to: number;
-};
-
-function nodeDims(n: AppNode): { w: number; h: number } {
-  const w =
-    n.measured?.width ??
-    (typeof n.width === "number" ? n.width : undefined) ??
-    (typeof n.style?.width === "number" ? (n.style.width as number) : 0);
-  const h =
-    n.measured?.height ??
-    (typeof n.height === "number" ? n.height : undefined) ??
-    (typeof n.style?.height === "number" ? (n.style.height as number) : 0);
-  return { w: w ?? 0, h: h ?? 0 };
-}
-
-function computeSnap(
-  drag: AppNode,
-  dragPos: { x: number; y: number },
-  others: AppNode[],
-  zoom: number = 1
-): { position: { x: number; y: number }; guides: Guide[] } {
-  const threshold = SNAP_THRESHOLD / zoom;
-  const { w: dw, h: dh } = nodeDims(drag);
-  const dEdgesX = [dragPos.x, dragPos.x + dw / 2, dragPos.x + dw];
-  const dEdgesY = [dragPos.y, dragPos.y + dh / 2, dragPos.y + dh];
-
-  let bestX = { diff: threshold, delta: 0, line: null as number | null };
-  let bestY = { diff: threshold, delta: 0, line: null as number | null };
-
-  for (const o of others) {
-    const { w: ow, h: oh } = nodeDims(o);
-    if (ow === 0 || oh === 0) continue;
-    const oXLines = [o.position.x, o.position.x + ow / 2, o.position.x + ow];
-    const oYLines = [o.position.y, o.position.y + oh / 2, o.position.y + oh];
-    for (const de of dEdgesX) {
-      for (const line of oXLines) {
-        const diff = line - de;
-        if (Math.abs(diff) < bestX.diff) {
-          bestX = { diff: Math.abs(diff), delta: diff, line };
-        }
-      }
-    }
-    for (const de of dEdgesY) {
-      for (const line of oYLines) {
-        const diff = line - de;
-        if (Math.abs(diff) < bestY.diff) {
-          bestY = { diff: Math.abs(diff), delta: diff, line };
-        }
-      }
-    }
-  }
-
-  const finalPos = {
-    x: dragPos.x + bestX.delta,
-    y: dragPos.y + bestY.delta,
-  };
-  const guides: Guide[] = [];
-
-  if (bestX.line !== null) {
-    const ys: number[] = [finalPos.y, finalPos.y + dh];
-    for (const o of others) {
-      const { w: ow, h: oh } = nodeDims(o);
-      if (ow === 0 || oh === 0) continue;
-      const lines = [o.position.x, o.position.x + ow / 2, o.position.x + ow];
-      if (lines.some((v) => Math.abs(v - bestX.line!) < 0.5)) {
-        ys.push(o.position.y, o.position.y + oh);
-      }
-    }
-    guides.push({
-      axis: "x",
-      pos: bestX.line,
-      from: Math.min(...ys),
-      to: Math.max(...ys),
-    });
-  }
-  if (bestY.line !== null) {
-    const xs: number[] = [finalPos.x, finalPos.x + dw];
-    for (const o of others) {
-      const { w: ow, h: oh } = nodeDims(o);
-      if (ow === 0 || oh === 0) continue;
-      const lines = [o.position.y, o.position.y + oh / 2, o.position.y + oh];
-      if (lines.some((v) => Math.abs(v - bestY.line!) < 0.5)) {
-        xs.push(o.position.x, o.position.x + ow);
-      }
-    }
-    guides.push({
-      axis: "y",
-      pos: bestY.line,
-      from: Math.min(...xs),
-      to: Math.max(...xs),
-    });
-  }
-
-  return { position: finalPos, guides };
-}
 
 type DimSeg = { from: number; to: number; along: number; value: number };
 
@@ -260,6 +166,7 @@ function CanvasInner() {
   const [guides, setGuides] = useState<Guide[]>([]);
   const [altDown, setAltDown] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const activeSnaps = useRef<Map<string, ActiveSnap>>(new Map());
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -282,17 +189,18 @@ function CanvasInner() {
   const handleNodesChange = useCallback(
     (changes: NodeChange<AppNode>[]) => {
       if (!showSmartGuides) {
+        activeSnaps.current.clear();
         onNodesChange(changes);
         return;
       }
       const current = useFlowStore.getState().nodes;
-      const dragChanges = changes.filter(
-        (c) => c.type === "position" && c.dragging && c.position
+      const positionChanges = changes.filter(
+        (c) => c.type === "position" && c.position
       );
       let patched = changes;
       const nextGuides: Guide[] = [];
-      if (dragChanges.length === 1) {
-        const c = dragChanges[0] as Extract<
+      if (positionChanges.length === 1) {
+        const c = positionChanges[0] as Extract<
           NodeChange<AppNode>,
           { type: "position" }
         >;
@@ -301,18 +209,40 @@ function CanvasInner() {
           const others = current.filter(
             (n) => n.id !== drag.id && !n.hidden
           );
-          const snap = computeSnap(drag, c.position, others, zoom);
-          nextGuides.push(...snap.guides);
+          const activeSnap = activeSnaps.current.get(drag.id);
+          const snap = computeSnap(drag, c.position, others, zoom, activeSnap);
+          if (c.dragging) {
+            activeSnaps.current.set(drag.id, snap.activeSnap);
+            nextGuides.push(...snap.guides);
+          } else {
+            activeSnaps.current.delete(drag.id);
+          }
           patched = changes.map((ch) =>
-            ch === c ? { ...c, position: snap.position } : ch
+            ch === c
+              ? {
+                  ...c,
+                  position: resolveSnapPosition(
+                    c.position!,
+                    snap.position,
+                    c.dragging !== false
+                  ),
+                }
+              : ch
           );
         }
       }
       const dragEnd = changes.some(
         (c) => c.type === "position" && c.dragging === false
       );
+      if (dragEnd) {
+        for (const c of changes) {
+          if (c.type === "position") {
+            activeSnaps.current.delete(c.id);
+          }
+        }
+      }
       if (nextGuides.length === 0 && !dragEnd) {
-        if (guides.length > 0 && dragChanges.length === 0) setGuides([]);
+        if (guides.length > 0 && positionChanges.length === 0) setGuides([]);
       } else if (dragEnd) {
         setGuides([]);
       } else {
